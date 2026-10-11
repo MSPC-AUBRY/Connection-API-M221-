@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Câblage interactif M221CE40T</title>
+<style>
+:root{--bg:#fff;--fg:#1c2330;--mut:#5b6678;--card:#f3f5f9;--bd:#d5dae3;--ac:#1d5fd6;--ok:#1a9a4a;--bn:#8b5a2b;--bu:#2a6fdb;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181f;--fg:#e8ecf3;--mut:#9aa5b8;--card:#1d232d;--bd:#323a48;--ac:#6ea0ff;--ok:#3ddc7a;--bn:#c58a4d;--bu:#5b95ff}}
+:root[data-theme="dark"]{--bg:#14181f;--fg:#e8ecf3;--mut:#9aa5b8;--card:#1d232d;--bd:#323a48;--ac:#6ea0ff;--ok:#3ddc7a;--bn:#c58a4d;--bu:#5b95ff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:900px;margin:auto;padding:16px}
+h1{font-size:1.5rem;margin:.2em 0}.sub{color:var(--mut);margin:0 0 12px}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:7px 12px;cursor:pointer}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.ctl{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.sw{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:12px}
+svg{width:100%;min-width:640px;display:block;color:var(--fg)}svg text{pointer-events:none}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:10px 0}
+.ok{color:var(--ok);font-weight:600}.ko{color:#d33;font-weight:600}.note{color:var(--mut);font-size:.88rem}
+</style></head><body><main>
+<h1>🔌 Câbler les entrées/sorties du M221CE40T</h1>
+<p class="sub">Terminale Bac Pro MSPC · Capteurs PNP · Sorties transistor « source » en 24 Vcc extérieur</p>
+<div class="box"><b>Mode d'emploi :</b> ① choisis un composant ② clique sur une borne <b>jaune</b> (entrée I… ou sortie Q…) ③ clique sur le composant pour simuler (objet détecté / sortie à 1 ; bouton poussoir : reste appuyé). Clique sur une autre borne pour savoir à quoi elle sert.</div>
+<div class="ctl" id="pal"></div>
+<div class="ctl"><button id="tS"></button><button id="tP"></button><button id="cl">Tout effacer</button></div>
+<div class="sw"><svg id="sv" viewBox="0 0 720 560"></svg></div>
+<div class="box" id="tx"></div>
+<p class="note">Schéma de bornier repris de ta fiche. Normes : symboles NF EN 60617, repères NF EN 81346-2, fils de capteur NF EN 60947-5-2 (BN +24 V, BU 0 V, BK signal). Protections : fusible F1 sur le +24 V des sorties, diode de roue libre sur les bobines à courant continu. Selon la référence, les bornes d'alimentation des sorties peuvent s'appeler V+ / V− : vérifier la notice constructeur (courant max par sortie, calibre du fusible).</p>
+<script>
+const $=s=>document.querySelector(s),CV=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const P=(p,c,w=2.5)=>`<polyline points="${p}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round"/>`;
+const T=(x,y,t,s=10,a='middle',c='currentColor')=>`<text x="${x}" y="${y}" font-size="${s}" text-anchor="${a}" fill="${c}">${t}</text>`;
+const OK='#1a9a4a',N=(a,b)=>Array.from({length:b-a+1},(_,i)=>a+i);
+const TT=[];
+[[15,['24V','0V','COM',...N(0,5).map(i=>'I'+i)]],[245,N(6,14).map(i=>'I'+i)],[475,N(15,23).map(i=>'I'+i)]].forEach(([s,l])=>l.forEach((n,i)=>TT.push({n,x:s+i*25+10,y:100,k:/^I/.test(n)?'in':'pw'})));
+[[105,['COM1','Q0','Q1','Q2','Q3','COM2','Q4','Q5','Q6','Q7']],[380,['COM3','Q8','Q9','Q10','Q11','COM4','Q12','Q13','Q14','Q15']]].forEach(([s,l])=>l.forEach((n,i)=>TT.push({n,x:s+i*25+10,y:320,k:/^Q/.test(n)?'out':'cm'})));
+['T','240V','0V'].forEach((n,i)=>TT.push({n:'~'+n,l:n,x:25+i*30,y:360,k:'ac'}));
+const g=n=>TT.find(t=>t.n==n);
+const K={b3:['B','Capteur 3 fils PNP','in'],b2:['B','Capteur 2 fils PNP','in'],bp:['S','Bouton poussoir NO','in'],yv:['YV','Électrovanne 24 Vcc','out'],km:['KM','Contacteur (bobine 24 Vcc)','out'],h:['H','Voyant 24 Vcc','out']};
+const M0="Choisis un composant dans la palette, puis clique sur une borne jaune.";
+let dev=[],mode=null,strap=1,psu=1,msg=M0,id=0;
+const ex=d=>{const n=d.t,i=+n.slice(1),a='%'+(n[0]=='I'?'I0.':'Q0.')+i,m=d.nm,cm='COM'+(1+Math.floor(i/4));
+ if(K[d.k][2]=='in')return {b3:`<b>${m}</b> sur <b>${a}</b> : BN → borne 24V, BU → borne 0V, BK → borne ${n}. Le capteur est alimenté en permanence.`,b2:`<b>${m}</b> sur <b>${a}</b> : BN → borne 24V, BU → borne ${n}. Le capteur est en série avec l'entrée (petit courant résiduel au repos).`,bp:`<b>${m}</b> (contact NO) sur <b>${a}</b> : une borne au 24V, l'autre vers la borne ${n}. Appuyé, il envoie le +24 V sur l'entrée.`}[d.k]+"<br>"+(d.on?(strap?`${d.k=='bp'?'Bouton appuyé':'Objet détecté'} : +24 V sur l'entrée, retour par COM → strap → 0V : <span class="ok">${a} = 1</span>`:`<span class="ko">Strap 0V–COM absent : la boucle est ouverte, ${a} reste à 0 !</span>`):`${d.k=='bp'?'Bouton relâché':'Rien détecté'} : ${a} = 0.`);
+ return {yv:`<b>${m}</b> sur <b>${a}</b> : ${cm} reçoit le +24 V extérieur protégé par F1, le transistor envoie ce +24 V vers ${m}, retour au 0 V extérieur. <b>D1</b> en parallèle : bobine à courant continu (cathode côté +).`,km:`<b>${m}</b> sur <b>${a}</b> : même principe, bobine A1/A2 en 24 Vcc avec <b>D1</b> en parallèle. Le courant de bobine doit rester sous le courant maximal de la sortie (voir notice).`,h:`<b>${m}</b> sur <b>${a}</b> : ${cm} → transistor → voyant → 0 V extérieur. Pas de diode : un voyant n'est pas une charge inductive.`}[d.k]+"<br>"+(d.on?(psu?`<span class="ok">${a} = 1</span> : le transistor envoie le +24 V de ${cm} vers ${m}.`:`<span class="ko">Pas de +24 V sur ${cm} : la sortie à transistor « source » ne peut rien alimenter !</span>`):`${a} = 0 : ${m} au repos.`)};
+const TI=t=>({'24V':"Sortie 24 Vcc de l'automate pour alimenter les capteurs (courant limité : voir notice).",'0V':"0 V des capteurs, relié à COM par le strap.",COM:"Commun des entrées : relié au 0 V pour des capteurs PNP (câblage « sink », logique positive).",'~T':"Terre (PE), conducteur vert/jaune.",'~240V':"Phase (L) : alimentation 100–240 Vca de l'automate, protégée par un disjoncteur.",'~0V':"Neutre (N) de l'alimentation alternative. Ne pas le confondre avec le 0 V du 24 Vcc !"}[t.n]||(t.k=='cm'?`${t.n} : commun du groupe de 4 sorties, relié au +24 V extérieur via le fusible F1.`:t.k=='in'?`Entrée ${t.n} (%I0.${t.n.slice(1)}) libre : choisis un capteur.`:`Sortie ${t.n} (%Q0.${t.n.slice(1)}) libre : choisis un récepteur.`));
+function draw(){
+ const bn=CV('--bn'),bu=CV('--bu'),x24=g('24V').x,x0=g('0V').x,xc=g('COM').x;
+ dev.forEach(d=>d.v=K[d.k][2]=='in'?d.on&&strap:d.on&&psu);
+ let s=`<rect x="5" y="96" width="710" height="250" rx="10" style="fill:none" stroke="currentColor" stroke-width="2"/>`+T(360,220,"M221CE40T · sorties transistor « source »",14)+T(120,152,"ENTRÉES 24 Vcc",11)+T(360,296,"SORTIES TRANSISTOR 24 Vcc",11);
+ if(strap)s+=P(`${x0},100 ${x0},86 ${xc},86 ${xc},100`,bu)+T(x0+25,82,"strap",9,'middle',bu);
+ TT.forEach(t=>{const u=dev.find(d=>d.t==t.n),hot=mode&&K[mode][2]==t.k&&!u;
+  s+=`<rect data-t="${t.n}" x="${t.x-8}" y="${t.y}" width="16" height="14" rx="2" style="fill:${u&&u.v?OK:hot?'#f5c518':'var(--bg)'};cursor:pointer" stroke="currentColor" stroke-width="${hot?3:1.5}"/>`+T(t.x,t.y<200?t.y+30:t.y>340?354:t.y-6,t.l||t.n,9)});
+ s+=T(55,392,"Alim. automate 100–240 Vca",9)+T(5,436,"+24 V ext.",10,'start',bn)+T(5,531,"0 V ext.",10,'start',bu);
+ const bc=psu?bn:'#999';
+ s+=P("60,432 640,432",bc,psu?2.5:1.5)+`<rect x="65" y="424" width="30" height="16" rx="3" style="fill:var(--bg)" stroke="currentColor" stroke-width="2"/>`+T(80,418,"F1",10)+P("100,527 640,527",bu);
+ ['COM1','COM2','COM3','COM4'].forEach(n=>s+=P(`${g(n).x},334 ${g(n).x},432`,bc,psu?2.5:1.5));
+ dev.forEach(d=>{const x=g(d.t).x,c=d.v?OK:'currentColor',f=d.on?'rgba(26,154,74,.3)':'var(--card)';
+  if(K[d.k][2]=='in'){
+   s+=P(`${x-9},40 ${x-9},62 ${x24},62 ${x24},100`,bn)+(d.k=='b3'?P(`${x+9},40 ${x+9},78 ${x0},78 ${x0},100`,bu):'')+P(`${x},40 ${x},100`,c)
+   +`<rect data-d="${d.id}" x="${x-22}" y="6" width="44" height="34" rx="6" style="fill:${f};cursor:pointer" stroke="currentColor" stroke-width="2"/>`+T(x,21,d.nm,11)+T(x,34,d.k=='b3'?'3 fils':d.k=='b2'?'2 fils':'poussoir',9);
+  }else{
+   s+=P(`${x},334 ${x},462`,c)+P(`${x},502 ${x},527`,bu)
+   +`<rect data-d="${d.id}" x="${x-22}" y="462" width="44" height="40" rx="6" style="fill:${d.k=='h'&&d.v?'#f5c518':f};cursor:pointer" stroke="currentColor" stroke-width="2"/>`+T(x,486,d.nm,12);
+   if(d.k!='h')s+=P(`${x+22},470 ${x+32},470 ${x+32},477`,'currentColor',2)+`<polygon points="${x+26},489 ${x+38},489 ${x+32},477" fill="currentColor"/>`+P(`${x+26},477 ${x+38},477`,'currentColor',2)+P(`${x+32},489 ${x+32},494 ${x+22},494`,'currentColor',2)+T(x+32,514,"D1",9);
+  }});
+ $('#sv').innerHTML=s;$('#tx').innerHTML=msg;
+ $('#tS').textContent="Strap 0V–COM : "+(strap?"présent ✔":"retiré ✘");$('#tP').textContent="+24 V ext. sur COM1…4 : "+(psu?"câblé ✔":"retiré ✘");
+ $('#tS').className=strap?'':'on';$('#tP').className=psu?'':'on';
+ document.querySelectorAll('#pal button').forEach(b=>b.className=b.dataset.k==mode?'on':'');
+}
+Object.entries(K).forEach(([k,v])=>{const b=document.createElement('button');b.textContent=v[1];b.dataset.k=k;b.onclick=()=>{mode=mode==k?null:k;msg=mode?`Clique sur une borne jaune : ${v[2]=='in'?'une entrée I…':'une sortie Q…'}`:M0;draw()};$('#pal').appendChild(b)});
+$('#sv').onclick=e=>{const o=e.target.dataset;
+ if(o.d){const d=dev.find(x=>x.id==o.d);if(d.k=='bp')return;d.on=!d.on;draw();msg=ex(d);draw();return}
+ if(o.t){const t=g(o.t);
+  if(mode){if(K[mode][2]!=t.k)msg="Ce composant se raccorde sur "+(K[mode][2]=='in'?'une entrée I…':'une sortie Q…')+".";
+   else if(dev.some(d=>d.t==t.n))msg="Cette borne est déjà utilisée.";
+   else{const d={id:++id,k:mode,t:t.n,on:0,nm:K[mode][0]+(dev.filter(x=>K[x.k][0]==K[mode][0]).length+1)};dev.push(d);mode=null;draw();msg=ex(d)+"<br><i>Clique sur le composant pour le simuler.</i>"}
+  }else msg=TI(t);
+  draw()}};
+$('#sv').onpointerdown=e=>{const d=dev.find(x=>x.id==e.target.dataset.d);if(d&&d.k=='bp'){d.on=1;draw();msg=ex(d);draw()}};
+['pointerup','pointercancel'].forEach(v=>addEventListener(v,()=>{const l=dev.filter(x=>x.k=='bp'&&x.on);if(l.length){l.forEach(x=>x.on=0);draw();msg=ex(l[0]);draw()}}));
+$('#tS').onclick=()=>{strap^=1;msg=strap?"Strap remis : les capteurs PNP fonctionnent.":"<span class='ko'>Sans le strap 0V–COM, aucun courant ne peut revenir au 0 V : toutes les entrées restent à 0.</span>";draw()};
+$('#tP').onclick=()=>{psu^=1;msg=psu?"+24 V extérieur câblé sur les COM des sorties (via F1).":"<span class='ko'>Sans +24 V sur COM, les sorties à transistor « source » n'alimentent rien.</span>";draw()};
+$('#cl').onclick=()=>{dev=[];mode=null;msg=M0;draw()};
+draw();
+</script></main></body></html>
